@@ -1,30 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta c  rset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>To-Do List</title>
     <style>
         body {
             font-family: Arial, sans-serif;
         }
-        #todoList {
+        #todo-table {
             border-collapse: collapse;
             width: 70%;
             margin: 0 auto;
         }
-        #todoList th, #todoList td {
+        #todo-table th, #todoList td {
             border: 1px solid #ddd;
             padding: 8px;
             text-align: left;
         }
-        #todoList th {
+        #todo-table th {
             background-color: #f0f0f0;
         }
-        #todoList th:first-child, #todoList th:last-child {
+        #todo-table th:first-child, #todoList th:last-child {
             width: 5%;
         }
-        #todoList th:nth-child(2) {
+        #todo-table th:nth-child(2) {
             width: 90%;
         }
         .add-form {
@@ -46,7 +46,7 @@
 
 <h2 style="text-align: center;">To-Do List</h2>
 
-<table id="todoList">
+<table id="todo-table">
     <thead>
         <tr>
             <th>Number</th>
@@ -77,7 +77,8 @@
             row.innerHTML = `
                 <td>${index + 1}</td>
                 <td>${item.text}</td>
-                <td><button onclick="removeItem(${index})">Remove</button></td>
+                <button onclick="removeItem(${item.id})">Delete</button>
+                <button onclick="editItem(${item.id})">Edit</button>
             `;
             listBody.appendChild(row);
         });
@@ -86,19 +87,146 @@
     function addItem() {
         const newItemInput = document.getElementById('newItem');
         const newItemText = newItemInput.value.trim();
-
         if (newItemText) {
-            items.push({ id: nextId++, text: newItemText });
-            newItemInput.value = '';
-            renderList();
+            fetch('/add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: newItemText })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        // Можно добавить элемент в список, вызвав перезагрузку или обновить DOM
+                        // Например, вызвать функцию renderList() для обновления таблицы
+                        console.log('Элемент добавлен, ID:', data.id);
+                        newItemInput.value = '';
+                        // Опционально: перезагрузить страницу или обновить таблицу через дополнительный запрос
+                        window.location.reload();
+                    } else {
+                        alert("Ошибка добавления: " + data.error);
+                    }
+                });
         }
     }
 
-    function removeItem(index) {
-        items.splice(index, 1);
-        renderList();
+    function removeItem(id) {
+        fetch('/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ id: id })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Элемент удалён, ID:', id);
+                    // Перезагрузите страницу или обновите DOM
+                    window.location.reload();
+                } else {
+                    alert("Ошибка удаления: " + data.error);
+                }
+            });
     }
+
+    function editItem(id) {
+        const newText = prompt("Введите новый текст:");
+        if (newText) {
+            fetch('/edit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ id: id, text: newText })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log('Элемент изменён, ID:', id);
+                        window.location.reload();
+                    } else {
+                        alert("Ошибка редактирования: " + data.error);
+                    }
+                });
+        }
+    }
+
 </script>
 
+<script>
+document.getElementById('todo-table').addEventListener('click', async (e) => {
+    if (e.target.classList.contains('delete-btn')) {
+        const id = parseInt(e.target.getAttribute('data-id'), 10);
+        try {
+            const response = await fetch('/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const result = await response.json();
+            if (result.success) {
+                location.reload(); // Перезагрузка страницы для обновления таблицы
+            } else {
+                alert('Ошибка при удалении: ' + result.error);
+            }
+        } catch (error) {
+            console.error('Ошибка:', error);
+            alert('Не удалось удалить задачу');
+        }
+    } else if (e.target.classList.contains('edit-btn')) {
+        const id = parseInt(e.target.getAttribute('data-id'), 10);
+        const row = e.target.closest('tr');
+        const currentText = row.cells[1].textContent;
+        const newText = prompt('Редактировать задачу:', currentText);
+        if (newText !== null && newText.trim() !== '') {
+            try {
+                const response = await fetch('/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, text: newText.trim() })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    location.reload(); // Перезагрузка страницы для обновления таблицы
+                } else {
+                    alert('Ошибка при редактировании: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Не удалось отредактировать задачу');
+            }
+        }
+    }
+});
+
+// Обработка формы добавления
+document.getElementById('add-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = document.getElementById('todo-input').value.trim();
+    if (text) {
+        try {
+            const response = await fetch('/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+            const result = await response.json();
+            if (result.success) {
+                location.reload(); // Перезагрузка страницы для обновления таблицы
+            } else {
+                alert('Ошибка при добавлении: ' + result.error);
+            }
+        } catch (error) {
+            console.error('Ошибка:', error);
+            alert('Не удалось добавить задачу');
+        }
+    }
+});
+</script>
+
+
+</script>
 </body>
 </html>
